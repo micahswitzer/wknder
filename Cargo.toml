@@ -1,0 +1,11 @@
+[package]
+name = "wknder"
+version = "0.1.0"
+authors = ["Micah Switzer <micah.switzer.dev@outlook.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+image = "0.22.3"
+rand = "0.7.2"
