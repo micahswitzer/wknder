@@ -2,6 +2,7 @@ use crate::vec3::{Vec3, Axis::*};
 use crate::ray::Ray;
 use std::f32::consts;
 
+#[derive(Copy, Clone, Debug)]
 pub struct Camera {
     origin: Vec3,
     lower_left_corner: Vec3,

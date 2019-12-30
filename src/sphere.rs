@@ -1,14 +1,14 @@
 use crate::{vec3::Vec3, ray::Ray, hittable::*, material::Material};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct Sphere {
     center: Vec3,
     radius: f32,
-    material: Rc<dyn Material>,
+    material: Arc<dyn Material + Sync + Send>,
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: f32, material: Rc<dyn Material>) -> Self {
+    pub fn new(center: Vec3, radius: f32, material: Arc<dyn Material + Sync + Send>) -> Self {
         Sphere {
             center,
             radius,
@@ -18,7 +18,7 @@ impl Sphere {
 }
 
 impl Hittable for Sphere {
-    fn hit(&self, r: &Ray, t_min: f32, t_max: f32, rec: &mut HitRecord) -> bool {
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let oc = r.origin() - self.center;
         let a = r.direction().dot(r.direction());
         let b = oc.dot(r.direction());
@@ -27,21 +27,25 @@ impl Hittable for Sphere {
         if disc > 0.0 {
             let temp = (-b - disc.sqrt()) / a;
             if temp < t_max && temp > t_min {
-                rec.t = temp;
-                rec.p = r.point_at_parameter(temp);
-                rec.normal = (rec.p - self.center) / self.radius;
-                rec.material = Some(Rc::clone(&self.material));
-                return true;
+                let p = r.point_at_parameter(temp);
+                return Some(HitRecord {
+                    t: temp,
+                    p,
+                    normal: (p - self.center) / self.radius,
+                    material: Some(Arc::clone(&self.material)),
+                });
             }
             let temp = (-b + disc.sqrt()) / a;
             if temp < t_max && temp > t_min {
-                rec.t = temp;
-                rec.p = r.point_at_parameter(temp);
-                rec.normal = (rec.p - self.center) / self.radius;
-                rec.material = Some(Rc::clone(&self.material));
-                return true;
+                let p = r.point_at_parameter(temp);
+                return Some(HitRecord {
+                    t: temp,
+                    p, 
+                    normal: (p - self.center) / self.radius,
+                    material: Some(Arc::clone(&self.material)),
+                });
             }
         }
-        false
+        None
     }
 }

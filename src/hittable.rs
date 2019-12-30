@@ -1,11 +1,11 @@
 use crate::{vec3::Vec3, ray::Ray, material::Material};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub struct HitRecord {
     pub t: f32,
     pub p: Vec3,
     pub normal: Vec3,
-    pub material: Option<Rc<dyn Material>>,
+    pub material: Option<Arc<dyn Material + Sync + Send>>,
 }
 
 impl HitRecord {
@@ -14,43 +14,35 @@ impl HitRecord {
             t: 0.0,
             p: Vec3::from(0.0),
             normal: Vec3::from(0.0),
-            material: Option::<Rc<dyn Material>>::None,
+            material: Option::<Arc<dyn Material + Sync + Send>>::None,
         }
     }
 }
 
 pub trait Hittable {
-    fn hit(&self, r: &Ray, t_min: f32, t_max: f32, rec: &mut HitRecord) -> bool;
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 
 pub struct HittableList {
-    list: Vec<Box<dyn Hittable>>,
+    list: Vec<Box<dyn Hittable + Sync + Send>>,
 }
 
 impl HittableList {
-    pub fn new(list: Vec<Box<dyn Hittable>>) -> HittableList {
+    pub fn new(list: Vec<Box<dyn Hittable + Sync + Send>>) -> HittableList {
         HittableList { list }
     }
 }
 
 impl Hittable for HittableList {
-    fn hit(&self, r: &Ray, t_min: f32, t_max: f32, rec: &mut HitRecord) -> bool {
-        let mut temp_rec = HitRecord::empty();
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let mut closest_so_far = t_max;
-        let mut hit_anything = false;
+        let mut rec: Option<HitRecord> = None;
         for hittable in self.list.iter() {
-            if hittable.hit(r, t_min, closest_so_far, &mut temp_rec) {
-                hit_anything = true;
+            if let Some(temp_rec) = hittable.hit(r, t_min, closest_so_far) {
                 closest_so_far = temp_rec.t;
-                rec.t = temp_rec.t;
-                rec.p = temp_rec.p;
-                rec.normal = temp_rec.normal;
-                rec.material = match &temp_rec.material {
-                    Some(m) => Some(Rc::clone(&m)),
-                    None => None
-                };
+                rec = Some(temp_rec);
             }
         }
-        hit_anything
+        rec
     }
 }
