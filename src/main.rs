@@ -1,5 +1,5 @@
 use image;
-use wknder::vec3::{Vec3, Axis::*};
+use wknder::vec3::{Vec3, Axis::*, Channel::*};
 use wknder::sphere::Sphere;
 use wknder::ray::Ray;
 use wknder::hittable::*;
@@ -8,17 +8,19 @@ use wknder::material::{Lambertian, Metal, Dielectric};
 use rand::Rng;
 use std::rc::Rc;
 use std::vec;
+use std::thread;
 
-const WIDTH: u32 = 1920;
-const HEIGHT: u32 = 1080;
-const AA_SAMPLES: u32 = 100;
-const MAX_BOUNCES: u32 = 50;
+const WIDTH: usize = 1920;
+const HEIGHT: usize = 1080;
+const AA_SAMPLES: usize = 100;
+const MAX_BOUNCES: usize = 50;
+const NUM_THREADS: usize = 8;
 
 fn main() {
-    let mut buf = vec![];
+    //let mut buf = vec![];
 
-    //let world = basic_scene();
-    let world = random_scene();
+    let world = basic_scene();
+    //let world = random_scene();
 
     let lookfrom = Vec3(8.0, 2.0, 2.5);
     let lookat = Vec3(0.0, 0.0, -1.0);
@@ -26,30 +28,50 @@ fn main() {
     let aperture = 0.1;
     let cam = Camera::new(lookfrom, lookat, Vec3(0.0, 1.0, 0.0), 35.0, WIDTH as f32 / HEIGHT as f32, aperture, dist_to_focus);
 
-    let mut rng = rand::thread_rng();
+    let mut arr = [0 as u8; WIDTH * HEIGHT * 3];
 
-    for j in (0..HEIGHT).rev() {
-        for i in 0..WIDTH {
-            let mut col = Vec3::from(0.0);
-            for _ in 0..AA_SAMPLES {
-                let u = (i as f32 + rng.gen::<f32>()) / WIDTH as f32;
-                let v = (j as f32 + rng.gen::<f32>()) / HEIGHT as f32;
-                let r = cam.get_ray(u, v);
-                col += color(&r, &world, 0);
+    let slice_size = HEIGHT / NUM_THREADS;
+    let mut handles = vec![];
+    for slice in arr.chunks_mut(get_idx(0, slice_size)) {
+        let my_slice_size = slice_size + 0;
+        let handle = thread::spawn(move || {
+            let mut rng = rand::thread_rng();
+            for j in (0..my_slice_size).rev() {
+                for i in 0..WIDTH {
+                    let mut col = Vec3::from(0.0);
+                    for _ in 0..AA_SAMPLES {
+                        let u = (i as f32 + rng.gen::<f32>()) / WIDTH as f32;
+                        let v = (j as f32 + rng.gen::<f32>()) / HEIGHT as f32;
+                        let r = cam.get_ray(u, v);
+                        col += color(&r, &world, 0);
+                    }
+                    col /= AA_SAMPLES as f32;
+                    let idx = get_idx(i, j);
+                    slice[idx] = float_to_byte(col[R]);
+                    slice[idx + 1] = float_to_byte(col[G]);
+                    slice[idx + 2] = float_to_byte(col[B]);
+                }
+                println!("Traced {} of {} vertical lines ({}%)", (HEIGHT - j), HEIGHT, ((HEIGHT - j) as f32 / HEIGHT as f32) * 100.0);
             }
-            col /= AA_SAMPLES as f32;
-            col.each(|x| buf.push(float_to_byte(x.sqrt())));
-        }
-        println!("Traced {} of {} vertical lines ({}%)", (HEIGHT - j), HEIGHT, ((HEIGHT - j) as f32 / HEIGHT as f32) * 100.0);
+        });
+        handles.push(handle);
     }
 
-    image::save_buffer("output.png", &buf, WIDTH, HEIGHT, image::ColorType::RGB(8)).unwrap();
+    for handle in handles.iter() {
+        handle.join().unwrap();
+    }
+
+    image::save_buffer("output.png", &arr, WIDTH as u32, HEIGHT as u32, image::ColorType::RGB(8)).unwrap();
+}
+
+fn get_idx(i: usize, j: usize) -> usize {
+    ((HEIGHT - j - 1) * WIDTH + i) * 3
 }
 
 fn color(r: &Ray, world: &impl Hittable, depth: u32) -> Vec3 {
     let mut rec = HitRecord::empty();
     if world.hit(r, 0.001, std::f32::MAX, &mut rec) {
-        if depth >= MAX_BOUNCES {
+        if depth >= MAX_BOUNCES as u32 {
             return Vec3::from(0.0);
         }
         
